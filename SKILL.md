@@ -1,7 +1,7 @@
 ---
 name: gemini-prompt-eng
 description: >
-  Generates optimized prompts for Google Gemini models (Gemini 3 Pro, 3 Flash, 2.5 Pro, 2.5 Flash).
+  Generates optimized prompts for Google Gemini models (Gemini 3 Pro, 3 Flash, 3 Pro Image, 2.5 Pro, 2.5 Flash).
   Interviews the user about their goal, selects the best prompt pattern (system instructions, few-shot,
   chain-of-thought, structured output, multimodal, function calling, grounding), and produces a
   complete, production-ready prompt with recommended parameters.
@@ -28,7 +28,7 @@ Generate optimized, production-ready prompts for Google Gemini models by applyin
 Ask the user the following questions to understand their requirements. If they have already provided some details, skip questions that are already answered.
 
 1. **Goal**: What do you want Gemini to accomplish? (e.g., classify text, generate code, extract data, chat, summarize, create content)
-2. **Model**: Which Gemini model? (Gemini 3 Pro / 3 Flash / 2.5 Pro / 2.5 Flash) — Default to **Gemini 3 Pro** if unspecified.
+2. **Model**: Which Gemini model? (Gemini 3 Pro / 3 Flash / 3 Pro Image / 2.5 Pro / 2.5 Flash) — Default to **Gemini 3 Pro** if unspecified. Note: All Gemini 3 models are in **Preview** status.
 3. **Use case type**: Text generation, code generation, data analysis/extraction, multimodal (image/video/audio/PDF), conversation, classification, or agent/tool use?
 4. **Output format**: Free text, JSON, Markdown, code, table, or other?
 5. **Existing context**: Do they have an existing prompt to improve? Any constraints or special requirements?
@@ -72,10 +72,17 @@ Apply these rules based on the target model. See `references/gemini-prompt-guide
 
 #### For Gemini 3 (Critical Differences)
 
+- **Preview status:** All Gemini 3 models use `-preview` suffix in API model IDs (e.g., `gemini-3-pro-preview`). They may be deprecated with minimum 2 weeks notice.
 - **Temperature: Keep at 1.0 (default).** Do NOT lower it — values below 1.0 can cause generation loops and degraded performance, especially on complex reasoning tasks. This is a major change from Gemini 2.x.
-- **Thinking level:** Use `thinking_level` parameter (`low`, `high`, or `minimal`/`medium` for Flash only). Default is `high`.
+- **Thinking level:** Use `thinking_level` parameter (`low`, `high`, or `minimal`/`medium` for Flash only). Default is `high`. Cannot be used together with legacy `thinking_budget`.
 - **Concise by default.** Gemini 3 produces short, direct answers. If you need verbose/conversational output, explicitly instruct it.
 - **Short prompts work best.** Gemini 3 performs best with brief, direct instructions. Overly long prompts from the Gemini 2.x era can be counterproductive.
+- **Constraint placement:** Place core requests and critical restrictions as the **final line** of instructions. Negative constraints placed too early may be dropped.
+- **Persona adherence:** Gemini 3 takes assigned personas seriously and may prioritize persona over other instructions. Avoid ambiguous role assignments.
+- **Thought Signatures:** In multi-turn conversations (especially function calling and image editing), Gemini 3 returns encrypted reasoning context ("thought signatures"). These **must** be returned exactly as received in subsequent turns — omitting them degrades performance or causes 400 errors.
+- **Context grounding:** For non-factual scenarios, explicitly state `"Treat the provided context as the absolute limit of truth"` to prevent the model from reverting to training data.
+- **Split-step verification:** When dealing with information the model may lack, verify availability first before requesting the answer, to prevent hallucination.
+- **`media_resolution` parameter:** Control token allocation for media inputs — `high` (1120 tokens) for images, `medium` (560 tokens) for PDFs, `low`/`medium` (70 tokens/frame) for video.
 
 #### For Gemini 2.5
 
@@ -130,7 +137,7 @@ Classify this customer feedback:
 "{feedback_text}"
 
 ### Recommended Parameters
-- Model: gemini-3-pro
+- Model: gemini-3-pro-preview
 - Temperature: 1.0 (Gemini 3 default — do not lower)
 - Thinking level: low (simple classification task)
 - Response format: application/json
@@ -223,7 +230,7 @@ class ExtractedData(BaseModel):
 
 client = genai.Client()
 response = client.models.generate_content(
-    model="gemini-3-pro",
+    model="gemini-3-pro-preview",
     contents="Extract data from: {input_text}",
     config=types.GenerateContentConfig(
         response_mime_type="application/json",
@@ -237,7 +244,7 @@ response = client.models.generate_content(
 
 ```python
 response = client.models.generate_content(
-    model="gemini-3-pro",
+    model="gemini-3-pro-preview",
     contents=[
         types.Part.from_image(image_data),  # Place media BEFORE text
         "Describe what you see in this image, then [specific task].",
@@ -264,7 +271,7 @@ tool_declaration = types.FunctionDeclaration(
 )
 
 response = client.models.generate_content(
-    model="gemini-3-pro",
+    model="gemini-3-pro-preview",
     contents="User request here",
     config=types.GenerateContentConfig(
         tools=[types.Tool(function_declarations=[tool_declaration])],
@@ -276,7 +283,7 @@ response = client.models.generate_content(
 
 ```python
 response = client.models.generate_content(
-    model="gemini-3-pro",
+    model="gemini-3-pro-preview",
     contents="What are the latest developments in [topic]?",
     config=types.GenerateContentConfig(
         tools=[types.Tool(google_search=types.GoogleSearch())],
@@ -290,13 +297,16 @@ response = client.models.generate_content(
 
 ### Gemini 3 Models
 
+> **Important:** All Gemini 3 model IDs require the `-preview` suffix (e.g., `gemini-3-pro-preview`, `gemini-3-flash-preview`).
+
 | Parameter | Recommended Value | Notes |
 |---|---|---|
 | `temperature` | **1.0 (do not change)** | Lower values cause loops and degraded reasoning |
-| `thinking_level` | `high` (complex) / `low` (simple) | Flash also supports `minimal` and `medium` |
-| `max_output_tokens` | Task-dependent | Set to prevent runaway generation costs |
+| `thinking_level` | `high` (complex) / `low` (simple) | Flash also supports `minimal` and `medium`. Cannot use with `thinking_budget` |
+| `max_output_tokens` | Task-dependent (max 64K for Pro/Flash, 32K for Pro Image) | Set to prevent runaway generation costs |
 | `top_k` / `top_p` | Use defaults | Only adjust if you have a specific reason |
 | `response_mime_type` | `"application/json"` for structured output | Combine with `response_json_schema` |
+| `media_resolution` | `high` / `medium` / `low` | Controls token allocation for media inputs |
 
 ### Gemini 2.5 Models
 
@@ -321,7 +331,8 @@ response = client.models.generate_content(
 
 ### Unsupported feature requested
 - If the user wants a feature not available on their chosen model (e.g., `thinking_level: medium` on Pro), explain the limitation and suggest an alternative.
-- For Gemini 3 features not yet available (e.g., image segmentation), suggest workarounds or alternative models.
+- For Gemini 3 features not yet available (e.g., Google Maps grounding, Computer Use, combining built-in tools with function calling), suggest workarounds or alternative models.
+- For image generation tasks, recommend **Gemini 3 Pro Image** (`gemini-3-pro-image-preview`) which supports 4K output, text rendering, and conversational editing.
 
 ### Prompt is too long for context window
 - Suggest breaking the prompt into a chain (sequential or parallel decomposition).
