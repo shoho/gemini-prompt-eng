@@ -36,18 +36,43 @@ Gemini is a next-token prediction engine that processes prompts through a multim
 ### 1.2 Model Variants and Specifications
 <!-- モデルバリアントと仕様 -->
 
+#### Gemini 3 Models (Preview)
+
+> **Note:** All Gemini 3 models are in **Preview** status. Model IDs require the `-preview` suffix. Preview models may be deprecated with minimum 2 weeks notice.
+
+| Specification | Gemini 3 Pro | Gemini 3 Flash | Gemini 3 Pro Image |
+|---|---|---|---|
+| **Model ID** | `gemini-3-pro-preview` | `gemini-3-flash-preview` | `gemini-3-pro-image-preview` |
+| **Input Token Limit** | 1,048,576 (1M) | 1,048,576 (1M) | 65,536 (64K) |
+| **Output Token Limit** | 65,536 (64K) | 65,536 (64K) | 32,768 (32K) |
+| **Knowledge Cutoff** | January 2025 | January 2025 | January 2025 |
+| **Input Modalities** | Text, Images, Video, Audio, PDF | Text, Images, Video, Audio, PDF | Text, Images |
+| **Strengths** | Breakthrough reasoning (90.4% GPQA), full codebase processing, multimodal | Pro-level intelligence at Flash speed, 3x faster than 2.5 Pro | 4K image generation, text rendering, conversational editing |
+| **Key Features** | Batch API, Caching, Code Execution, File Search, Function Calling, Google Search Grounding, Structured Outputs, Thinking, URL Context, Thought Signatures, Generative UI | Same as Pro | Image generation, text in images, grounded generation |
+| **Thinking Control** | `thinking_level`: `low`, `high` | `thinking_level`: `minimal`, `low`, `medium`, `high` | N/A |
+| **Free Tier** | No | Yes | No |
+
+**Deep Think mode:** An extended reasoning mode for Gemini 3 Pro, designed for complex math, science, and logic problems. Available to AI Ultra subscribers.
+
+**When to choose Gemini 3 models:**
+- **3 Pro:** Complex tasks requiring broad world knowledge, advanced reasoning, agentic systems, large-context analysis, complex engineering
+- **3 Flash:** Everyday tasks, chatbots, agent workflows, streaming applications, cost-sensitive production workloads (outperforms 2.5 Pro on 18/20 eval categories while being 3x faster and 60-70% cheaper)
+- **3 Pro Image:** High-quality image generation, text rendering in images, conversational image editing
+
+#### Gemini 2.5 Models (GA)
+
 | Specification | Gemini 2.5 Pro | Gemini 2.5 Flash |
 |---|---|---|
 | **Model ID** | `gemini-2.5-pro` | `gemini-2.5-flash` |
 | **Input Token Limit** | 1,048,576 (1M) | 1,048,576 (1M) |
 | **Output Token Limit** | 65,536 (~66K) | 65,536 (~66K) |
 | **Input Modalities** | Text, Images, Video, Audio, PDF | Text, Images, Video, Audio, PDF |
-| **Strengths** | Advanced reasoning, complex code, math, STEM | Price-performance, speed, large-scale processing |
+| **Strengths** | Advanced reasoning, complex code, math, STEM, stable production flagship | Price-performance, speed, large-scale processing |
 | **Key Features** | Batch API, Caching, Code Execution, File Search, Function Calling, Google Search Grounding, Structured Outputs, Thinking, URL Context | Same as Pro |
 
-**When to choose Pro vs Flash:**
-- **Pro:** Complex reasoning tasks, nuanced code generation, difficult math/STEM problems, tasks requiring deep analysis
-- **Flash:** High-volume processing, latency-sensitive applications, cost-conscious deployments, agentic workflows with many API calls
+**When to choose Gemini 2.5 models:**
+- **2.5 Pro:** Production workloads requiring stability (GA status), long-context retrieval without complex reasoning (91.5% MRCR at 128K)
+- **2.5 Flash:** High-volume processing, latency-sensitive applications, cost-conscious deployments, agentic workflows with many API calls
 
 ### 1.3 Token Context Equivalents
 <!-- トークンコンテキストの目安 -->
@@ -202,12 +227,25 @@ Chain-of-thought prompting elicits step-by-step reasoning before the final answe
    ```
 
 3. **Gemini "Thinking" mode:** Gemini 2.5+ models support a built-in thinking capability. When enabled, the model internally reasons before responding. This is a model-level feature, not just a prompt technique:
+
+   **Gemini 2.5** — uses `thinking_budget` (token count):
    ```python
    response = client.models.generate_content(
        model="gemini-2.5-pro",
        contents="Your complex problem here",
        config=types.GenerateContentConfig(
            thinking=types.ThinkingConfig(thinking_budget=10000)
+       ),
+   )
+   ```
+
+   **Gemini 3** — uses `thinking_level` (low/medium/high/minimal). Cannot be combined with `thinking_budget`:
+   ```python
+   response = client.models.generate_content(
+       model="gemini-3-pro-preview",
+       contents="Your complex problem here",
+       config=types.GenerateContentConfig(
+           thinking=types.ThinkingConfig(thinking_level="high")
        ),
    )
    ```
@@ -371,7 +409,7 @@ response = client.models.generate_content(
 - Research tasks requiring up-to-date sources
 - Any query where the model's training data may be outdated
 
-**Pricing:** Gemini 3 models: per-query pricing. Gemini 2.5 models: per-prompt pricing.
+**Pricing:** 5,000 prompts/month free for both Gemini 3 and 2.5 models, then $14/1,000 search queries.
 
 ### 3.4 Multimodal Prompting
 <!-- マルチモーダルプロンプティング -->
@@ -397,8 +435,9 @@ response = client.models.generate_content(
 
 Tips:
 - Ask the model to **describe what it sees first**, then reason about it
-- Lower temperature to reduce hallucination about visual details
+- For Gemini 2.5: lower temperature to reduce hallucination about visual details. For Gemini 3: keep temperature at 1.0 and use clear instructions to reduce hallucination instead
 - Highlight which regions of the image matter most
+- Use `media_resolution` parameter to control token allocation (Gemini 3)
 
 **Video prompting:**
 - Use **MM:SS format** when referencing specific moments (e.g., "At 01:15...")
@@ -495,6 +534,80 @@ Reduces cost when repeatedly querying against the same large context.
 - Recurring queries against a code repository
 - Multi-turn conversations with large static context
 
+### 3.7 Gemini 3 Specific Features
+<!-- Gemini 3 固有の機能 -->
+
+#### Thought Signatures
+<!-- 思考署名 -->
+
+Gemini 3 models return **thought signatures** — encrypted reasoning context that must be preserved in multi-turn conversations. This is especially critical for function calling and image editing workflows.
+
+**Rules:**
+- Return thought signatures **exactly as received** in subsequent turns
+- Never modify, parse, or omit them
+- Omitting thought signatures degrades performance or causes **400 errors**
+
+```python
+# Multi-turn with thought signatures
+# The response.candidates[0].content includes thought signature parts
+# Pass them back as-is in the next turn
+chat = client.chats.create(model="gemini-3-pro-preview")
+response1 = chat.send_message("Call the weather function for Tokyo")
+# ... process function call, return result ...
+# The chat object automatically preserves thought signatures
+response2 = chat.send_message(function_response)
+```
+
+#### Media Resolution Control
+<!-- メディア解像度制御 -->
+
+The `media_resolution` parameter controls token allocation for media inputs, allowing you to optimize cost vs. quality:
+
+| Media Type | `high` | `medium` | `low` |
+|---|---|---|---|
+| Images | 1,120 tokens | 560 tokens | 280 tokens |
+| PDFs | 1,120 tokens/page | 560 tokens/page | 280 tokens/page |
+| Video | 140 tokens/frame | 70 tokens/frame | 70 tokens/frame |
+
+```python
+response = client.models.generate_content(
+    model="gemini-3-pro-preview",
+    contents=[image_part, "Describe this image in detail."],
+    config=types.GenerateContentConfig(
+        media_resolution=types.MediaResolution.MEDIA_RESOLUTION_HIGH,
+    ),
+)
+```
+
+#### Generative UI
+<!-- 生成的 UI -->
+
+Gemini 3 can create dynamic user interfaces and interactive visual experiences, going beyond static content generation. This is a new capability not available in Gemini 2.5.
+
+#### Full Codebase Processing
+<!-- コードベース全体の処理 -->
+
+Gemini 3 can process entire codebases (50,000+ lines across multiple files) without RAG, with full context retention. Place specific instructions/questions **after** the code context, and use anchoring phrases like `"Based on the entire codebase above..."`.
+
+#### Gemini 3 Prompting Best Practices Summary
+<!-- Gemini 3 プロンプティングのベストプラクティスまとめ -->
+
+1. **Be direct:** State goals clearly and concisely. Avoid persuasive or excessive language.
+2. **Constraint placement:** Place core requests and critical restrictions as the **final line** of instructions. Negative constraints placed too early may be dropped. Structure: context → main instructions → constraints at the end.
+3. **Persona adherence:** The model takes assigned personas seriously and may prioritize persona over other instructions. Avoid ambiguous role assignments.
+4. **Context grounding:** For non-factual scenarios, explicitly state `"Treat the provided context as the absolute limit of truth"` to prevent the model from reverting to training data.
+5. **Split-step verification:** When dealing with information the model may lack, verify availability first before requesting the answer, to prevent hallucination.
+6. **Structured prompts:** Use XML-style tags or Markdown headings to create unambiguous boundaries between instructions, context, and tasks.
+7. **Large context:** Place specific instructions/questions **after** the data context. Use anchoring phrases like `"Based on the entire document above..."`.
+
+#### Gemini 3 Unsupported Features (as of 2026-02)
+<!-- Gemini 3 で未サポートの機能 -->
+
+The following features are **not yet supported** on Gemini 3:
+- Google Maps grounding
+- Computer Use
+- Combining built-in tools (Google Search, Code Execution) with function calling in the same request
+
 ---
 
 ## 4. Advanced Patterns
@@ -520,7 +633,7 @@ Reduces cost when repeatedly querying against the same large context.
 | Creative writing | 1.0 – 1.5 | 0.95 | More diverse outputs |
 | Brainstorming | 1.5 – 2.0 | 1.0 | Maximum creativity |
 
-**Important for Gemini 3:** Keep temperature at the **default value of 1.0**. Gemini 3's reasoning capabilities are optimized for this setting. Lowering temperature below default risks causing generation loops.
+**Important for Gemini 3:** Keep temperature at the **default value of 1.0**. Gemini 3's reasoning capabilities are optimized for this setting. Lowering temperature below default risks causing generation loops, especially in complex math or reasoning tasks.
 
 ### 4.2 Safety Settings Configuration
 <!-- セーフティ設定 -->
@@ -856,12 +969,13 @@ Behavioral dimensions:
 
 | GPT Pattern | Gemini Behavior | What to Do Instead |
 |---|---|---|
-| Elaborate persona backstories | Gemini works better with concise personas | Keep persona descriptions short and functional |
-| `"Let's think step by step"` (magic phrase) | Works but Gemini's built-in Thinking mode is more effective | Use `thinking` config parameter for Gemini 2.5+ |
+| Elaborate persona backstories | Gemini works better with concise personas; Gemini 3 may over-prioritize detailed personas | Keep persona descriptions short and functional |
+| `"Let's think step by step"` (magic phrase) | Works but Gemini's built-in Thinking mode is more effective | Use `thinking` config parameter for Gemini 2.5+, `thinking_level` for Gemini 3 |
 | Heavy prompt engineering to avoid refusals | Gemini 2.5+ defaults safety to OFF | Usually unnecessary; configure safety settings if needed |
-| Temperature 0 for deterministic output | Gemini 3 is optimized for temperature 1.0 | Use default temperature, control determinism via instructions |
+| Temperature 0 for deterministic output | Gemini 3 is optimized for temperature 1.0; lowering causes loops | Use default temperature, control determinism via instructions |
 | XML-heavy prompts without explanation | Gemini handles both XML and Markdown well | Either format works; just be consistent |
 | System message workarounds | Gemini has native, first-class system instructions | Use the dedicated `system_instruction` parameter |
+| Placing constraints at the beginning | Gemini 3 may drop constraints placed too early | Place constraints at the **end** of instructions |
 
 ### 6.3 Over-Prompting vs Under-Prompting
 <!-- 過剰プロンプティング vs 不足プロンプティング -->
@@ -948,6 +1062,16 @@ Use this checklist before finalizing any prompt:
 - [Prompt Engineering Whitepaper — Kaggle/Google (Lee Boonstra)](https://www.kaggle.com/whitepaper-prompt-engineering)
 - [Gemini for Google Workspace Prompting Guide (PDF)](https://services.google.com/fh/files/misc/gemini-for-google-workspace-prompting-guide-101.pdf)
 - [Structured Outputs with JSON Schema — Google Blog](https://blog.google/technology/developers/gemini-api-structured-outputs/)
+
+### Gemini 3 Specific Documentation
+- [Gemini 3 Introduction — Google Blog](https://blog.google/products/gemini/gemini-3/)
+- [Gemini 3 Flash — Google Blog](https://blog.google/products-and-platforms/products/gemini/gemini-3-flash/)
+- [Gemini 3 Deep Think — Google Blog](https://blog.google/products/gemini/gemini-3-deep-think/)
+- [Gemini 3 Developer Guide — Google AI](https://ai.google.dev/gemini-api/docs/gemini-3)
+- [Gemini 3 Pro Documentation — Vertex AI](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/3-pro)
+- [Gemini 3 Flash Documentation — Vertex AI](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/3-flash)
+- [Gemini 3 Prompting Guide — Vertex AI](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/start/gemini-3-prompting-guide)
+- [Gemini API Pricing — Google AI](https://ai.google.dev/gemini-api/docs/pricing)
 
 ### Community & Third-Party References
 - [Gemini 2.5 Pro Best Practices — Google Cloud Community](https://medium.com/google-cloud/best-practices-for-prompt-engineering-with-gemini-2-5-pro-755cb473de70)

@@ -6,8 +6,10 @@ Google Gemini モデル向けに最適化されたプロンプトを生成する
 
 ## 対応モデル
 
-- Gemini 3 Pro / 3 Flash
+- Gemini 3 Pro / 3 Flash / 3 Pro Image（すべて Preview）
 - Gemini 2.5 Pro / 2.5 Flash
+
+> **Note:** Gemini 3 モデルはすべて Preview ステータスです。API モデル ID には `-preview` サフィックスが付きます（例: `gemini-3-pro-preview`）。Preview モデルは最低 2 週間の通知で非推奨になる可能性があります。
 
 ## 機能
 
@@ -75,7 +77,7 @@ You are a customer feedback classifier. Classify each feedback message into
 exactly one category and extract the key topic.
 
 ### Recommended Parameters
-- Model: gemini-3-pro
+- Model: gemini-3-pro-preview
 - Temperature: 1.0 (Gemini 3 default)
 - Thinking level: low
 - Response format: application/json
@@ -90,10 +92,26 @@ exactly one category and extract the key topic.
 
 | 項目 | Gemini 2.5 | Gemini 3 |
 |------|-----------|----------|
+| ステータス | GA（安定版） | **Preview**（非推奨リスクあり） |
+| モデル ID | `gemini-2.5-pro` | `gemini-3-pro-preview`（`-preview` 必須） |
 | Temperature | タスクに応じて 0.0-1.0 | **常に 1.0**（下げるとループ発生） |
-| 思考制御 | `thinking_budget` (トークン数) | `thinking_level` (low/high) |
+| 思考制御 | `thinking_budget` (トークン数) | `thinking_level` (low/medium/high/minimal) |
 | プロンプト長 | 長い指示も有効 | **短く直接的な指示が最適** |
 | 出力スタイル | 設定次第 | デフォルトで簡潔 |
+| ペルソナ遵守 | 通常 | **ペルソナを他の指示より優先する傾向** |
+| Thought Signatures | なし | **マルチターンで暗号化思考コンテキストの返却が必要** |
+
+> `thinking_level` の選択肢: Pro は `low` / `high`、Flash は `low` / `medium` / `high` / `minimal`
+
+### Gemini 3 モデル一覧
+
+| モデル | API Model ID | 入力トークン | 出力トークン | 用途 |
+|--------|-------------|-------------|-------------|------|
+| Gemini 3 Pro | `gemini-3-pro-preview` | 1M | 64K | 高度な推論・分析・コーディング |
+| Gemini 3 Flash | `gemini-3-flash-preview` | 1M | 64K | 高速・低コスト・日常タスク |
+| Gemini 3 Pro Image | `gemini-3-pro-image-preview` | 64K | 32K | 4K 画像生成・テキストレンダリング |
+
+**Deep Think モード:** Gemini 3 Pro の拡張推論モードで、複雑な数学・科学・論理問題向け。AI Ultra サブスクリプション向け。
 
 ## スキル構成
 
